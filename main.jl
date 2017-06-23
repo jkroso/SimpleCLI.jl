@@ -25,18 +25,24 @@ macro CLI(tuple)
         default_value(param)
       end
       value = parse_value(param, value)
-      $(esc(:eval))(Expr(:(=), param.name, QuoteNode(value)))
+      $(esc(:eval))(Expr(:(=), name(param), QuoteNode(value)))
     end
   end
 end
 
-struct Parameter
+abstract type Parameter end
+
+struct Single <: Parameter
   name::Symbol
   DT::DataType
   default::Nullable{Any}
 end
 
-const help = Parameter(:help, Bool, Nullable(false))
+struct Spread <: Parameter
+  param::Single
+end
+
+const help = Single(:help, Bool, Nullable(false))
 
 struct CLI
   positionals::Vector{Parameter}
@@ -57,7 +63,9 @@ parse_param(p) = begin
   if Meta.isexpr(p, :kw) || Meta.isexpr(p, :(=))
     :(assoc($(parse_param(p.args[1])), :default, Nullable($(p.args[2]))))
   elseif Meta.isexpr(p, :(::))
-    :(Parameter($(QuoteNode(p.args[1])), $(esc(p.args[2])), Nullable()))
+    :(Single($(QuoteNode(p.args[1])), $(esc(p.args[2])), Nullable()))
+  elseif Meta.isexpr(p, :...)
+    :(Spread($(parse_param(p.args[1]))))
   else
     error("Unknown parameter format $p")
   end
@@ -88,6 +96,8 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
       else
         mappings[param] = true
       end
+    elseif cli.positionals[positionals + 1] isa Spread
+      push!(get!(mappings, cli.positionals[positionals + 1], []), arg)
     else
       mappings[cli.positionals[positionals += 1]] = arg
     end
@@ -99,15 +109,21 @@ end
 expects_value(p::Parameter) = p.DT != Bool
 
 parse_value(p::Parameter, value::Any) = value
-parse_value(p::Parameter, value::AbstractString) = begin
+parse_value(s::Spread, value::Vector) = map(a->parse_value(s.param, a), value)
+parse_value(p::Single, value::AbstractString) =
   if     p.DT == Integer parse(Int, value)
   elseif p.DT <: Number parse(p.DT, value)
   elseif p.DT <: AbstractString value
   else   p.DT(value)
   end
-end
 
-default_value(p::Parameter) =
+name(s::Single) = s.name
+name(s::Spread) = name(s.param)
+datatype(s::Single) = s.DT
+datatype(s::Spread) = datatype(s.param)
+
+default_value(p::Spread) = Vector{datatype(p)}()
+default_value(p::Single) =
   if isnull(p.default) p.DT == Bool ? false : p.default
   else get(p.default)
   end
@@ -127,8 +143,8 @@ end
 
 print_help(p::Parameter, kw::Bool) = begin
   print("  ")
-  kw && print("-$(String(p.name)[1]), --")
-  print(p.name, "::", p.DT)
+  kw && print("-$(String(name(p))[1]), --")
+  print(name(p), "::", datatype(p))
   if isnull(default_value(p))
     println(" (Required)")
   else
