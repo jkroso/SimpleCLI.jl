@@ -18,10 +18,10 @@ macro CLI(tuple)
     for param in vcat(cli.positionals, cli.flags)
       value = if haskey(mapping, param)
         mapping[param]
-      elseif param.DT == Bool
+      elseif datatype(param) == Bool
         false
       else
-        @assert !isnull(default_value(param)) " please provide a value for $(param.name)"
+        @assert !isnull(default_value(param)) " please provide a value for $(name(param))"
         default_value(param)
       end
       value = parse_value(param, value)
@@ -78,18 +78,21 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
   while i <= length(ARGS)
     arg = ARGS[i]
     if ismatch(kw_arg, arg)
-      dashes, name, value = match(kw_arg, arg).captures
+      dashes, argname, value = match(kw_arg, arg).captures
       # handle compact flags e.g -dp 3000
       if length(dashes) == 1
-        ARGS = vcat(ARGS[1:i-1], map(s->"-$s", split(name, "")), value == nothing ? [] : [value], ARGS[i+1:end])
+        ARGS = vcat(ARGS[1:i-1],
+                    map(s->"-$s", split(argname, "")),
+                    value == nothing ? [] : [value],
+                    ARGS[i+1:end])
         arg = ARGS[i]
-        dashes, name, value = match(kw_arg, arg).captures
-        flags = filter(f->startswith(String(f.name), name), cli.flags)
+        dashes, argname, value = match(kw_arg, arg).captures
+        flags = filter(f->startswith(String(name(f)), argname), cli.flags)
       else
-        flags = filter(f->f.name == Symbol(name), cli.flags)
+        flags = filter(f->name(f) == Symbol(argname), cli.flags)
       end
       @assert !isempty(flags) "Invalid keyword argument $arg"
-      @assert length(flags) == 1 "$arg is ambiguous. Use $(join([f.name for f in flags], ", ", ", or ")) instead"
+      @assert length(flags) == 1 "$arg is ambiguous. Use $(join(map(name, flags), ", ", ", or ")) instead"
       param = flags[1]
       if expects_value(param)
         mappings[param] = value == nothing ? ARGS[i+=1] : value
@@ -106,7 +109,7 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
   mappings
 end
 
-expects_value(p::Parameter) = p.DT != Bool
+expects_value(p::Parameter) = datatype(p) != Bool
 
 parse_value(p::Parameter, value::Any) = value
 parse_value(s::Spread, value::Vector) = map(a->parse_value(s.param, a), value)
