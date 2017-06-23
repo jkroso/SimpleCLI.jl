@@ -148,6 +148,7 @@ print_help(p::Parameter, kw::Bool) = begin
   print("  ")
   kw && print("-$(String(name(p))[1]), --")
   print(name(p), "::", datatype(p))
+  p isa Spread && print("...")
   if isnull(default_value(p))
     println(" (Required)")
   else
