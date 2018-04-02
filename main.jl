@@ -61,7 +61,7 @@ end
 parse_params(params) = :([$(map(parse_param, params)...)])
 parse_param(p) = begin
   if Meta.isexpr(p, :kw) || Meta.isexpr(p, :(=))
-    :(assoc($(parse_param(p.args[1])), :default, Nullable($(p.args[2]))))
+    :(assoc($(parse_param(p.args[1])), :default, Nullable($(esc(p.args[2])))))
   elseif Meta.isexpr(p, :(::))
     :(Single($(QuoteNode(p.args[1])), $(esc(p.args[2])), Nullable()))
   elseif Meta.isexpr(p, :...)
