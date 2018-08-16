@@ -21,7 +21,7 @@ macro CLI(tuple)
       elseif datatype(param) == Bool
         false
       else
-        @assert !isnull(default_value(param)) " please provide a value for $(name(param))"
+        @assert !ismissing(default_value(param)) " please provide a value for $(name(param))"
         default_value(param)
       end
       value = parse_value(param, value)
@@ -35,14 +35,14 @@ abstract type Parameter end
 struct Single <: Parameter
   name::Symbol
   DT::DataType
-  default::Nullable{Any}
+  default::Union{Any,Missing}
 end
 
 struct Spread <: Parameter
   param::Single
 end
 
-const help = Single(:help, Bool, Nullable(false))
+const help = Single(:help, Bool, false)
 
 struct CLI
   positionals::Vector{Parameter}
@@ -61,9 +61,9 @@ end
 parse_params(params) = :([$(map(parse_param, params)...)])
 parse_param(p) = begin
   if Meta.isexpr(p, :kw) || Meta.isexpr(p, :(=))
-    :(assoc($(parse_param(p.args[1])), :default, Nullable($(esc(p.args[2])))))
+    :(assoc($(parse_param(p.args[1])), :default, $(esc(p.args[2]))))
   elseif Meta.isexpr(p, :(::))
-    :(Single($(QuoteNode(p.args[1])), $(esc(p.args[2])), Nullable()))
+    :(Single($(QuoteNode(p.args[1])), $(esc(p.args[2])), missing))
   elseif Meta.isexpr(p, :...)
     :(Spread($(parse_param(p.args[1]))))
   else
@@ -77,7 +77,7 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
   i = 1
   while i <= length(ARGS)
     arg = ARGS[i]
-    if ismatch(kw_arg, arg)
+    if occursin(kw_arg, arg)
       dashes, argname, value = match(kw_arg, arg).captures
       # handle compact flags e.g -dp 3000
       if length(dashes) == 1
@@ -127,8 +127,8 @@ datatype(s::Spread) = datatype(s.param)
 
 default_value(p::Spread) = Vector{datatype(p)}()
 default_value(p::Single) =
-  if isnull(p.default) p.DT == Bool ? false : p.default
-  else get(p.default)
+  if ismissing(p.default) p.DT == Bool ? false : p.default
+  else p.default
   end
 
 print_help(cli::CLI, doc) = begin
@@ -149,7 +149,7 @@ print_help(p::Parameter, kw::Bool) = begin
   kw && print("-$(String(name(p))[1]), --")
   print(name(p), "::", datatype(p))
   p isa Spread && print("...")
-  if isnull(default_value(p))
+  if ismissing(default_value(p))
     println(" (Required)")
   else
     println(" (defaults to $(default_value(p)))")

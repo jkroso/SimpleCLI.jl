@@ -6,6 +6,6 @@
 
 times < 0 && throw(ArgumentError("cannot repeat negative times"))
 for i in 1:times
-  print_with_color(color, join(messages, ' '))
+  printstyled(join(messages, ' '), color=color)
   newline && println()
 end
