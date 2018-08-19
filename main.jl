@@ -1,8 +1,10 @@
+@require "github.com/MikeInnes/MacroTools.jl" striplines
 @require "github.com/jkroso/Prospects.jl" assoc
 
 const kw_arg = r"^(-{1,2})(\w+)(?:=(\w+))?"
 
 macro CLI(tuple)
+  tuple = striplines(tuple)
   cli = if Meta.isexpr(tuple, :block)
     parse_CLI(:(a($(tuple.args[1]); $(tuple.args[2]))).args[2:end])
   else
