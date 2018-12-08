@@ -10,14 +10,15 @@ macro CLI(tuple)
   else
     parse_CLI(tuple.args)
   end
+  name = esc(gensym(:cli))
   quote
-    Base.@__doc__ cli = $cli
-    mapping = parse_ARGS(Main.ARGS, cli)
+    Base.@__doc__ $name = $cli
+    mapping = parse_ARGS(Main.ARGS, $name)
     if haskey(mapping, help)
-      print_help(cli, Base.@doc(cli))
+      print_help($name, Base.@doc($name))
       exit()
     end
-    for param in vcat(cli.positionals, cli.flags)
+    for param in vcat($name.positionals, $name.flags)
       value = if haskey(mapping, param)
         mapping[param]
       elseif datatype(param) == Bool
