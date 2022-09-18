@@ -1,21 +1,16 @@
-@require "github.com/MikeInnes/MacroTools.jl" striplines
 @require "github.com/jkroso/Prospects.jl" assoc
 
 const kw_arg = r"^(-{1,2})(\w+)(?:=(\w+))?"
 
-macro CLI(tuple)
-  tuple = striplines(tuple)
-  cli = if Meta.isexpr(tuple, :block)
-    parse_CLI(:(a($(tuple.args[1]); $(tuple.args[2]))).args[2:end])
-  else
-    parse_CLI(tuple.args)
-  end
-  name = esc(gensym(:cli))
+macro main(tuple)
+  cmd = parse_command(Expr(:call, :main, tuple.args...))
+  name = esc(gensym(:cmd))
   quote
-    Base.@__doc__ $name = $cli
-    mapping = parse_ARGS(Main.ARGS, $name)
+    Base.@__doc__ $name = $cmd
+    push!($name.flags, help)
+    mapping = parse_ARGS(Main.ARGS, $name, 0)
     if haskey(mapping, help)
-      print_help($name, Base.@doc($name))
+      print_help($cmd, Base.@doc($name))
       exit()
     end
     for param in vcat($name.positionals, $name.flags)
@@ -47,17 +42,42 @@ end
 
 const help = Single(:help, Bool, false)
 
-struct CLI
+struct Command{name}
   positionals::Vector{Parameter}
   flags::Vector{Parameter}
-  CLI(p,f) = new(p, vcat(f, help))
 end
 
-parse_CLI(params) = begin
+name(::Command{t}) where t = t
+
+macro command(name, block)
+  quote
+    Base.@__doc__ c = $(parse_command(name))
+    if Symbol(Main.ARGS[1]) == name(c)
+      mapping = parse_ARGS(Main.ARGS, c, 1)
+      for param in vcat(c.positionals, c.flags)
+        value = if haskey(mapping, param)
+          mapping[param]
+        elseif datatype(param) == Bool
+          false
+        else
+          @assert !ismissing(default_value(param)) " please provide a value for $(name(param))"
+          default_value(param)
+        end
+        value = parse_value(param, value)
+        $(esc(:eval))(Expr(:(=), name(param), QuoteNode(value)))
+      end
+      $(esc(block))
+      exit()
+    end
+  end
+end
+
+parse_command(title) = begin
+  name, params... = title.args
   if Meta.isexpr(params[1], :parameters)
-    :(CLI($(parse_params(params[2:end])), $(parse_params(params[1].args))))
+    :(Command{$(QuoteNode(name))}($(parse_params(params[2:end])), $(parse_params(params[1].args))))
   else
-    :(CLI($(parse_params(params)), []))
+    :(Command{$(QuoteNode(name))}($(parse_params(params)), []))
   end
 end
 
@@ -74,10 +94,10 @@ parse_param(p) = begin
   end
 end
 
-parse_ARGS(ARGS::Vector, cli::CLI) = begin
+parse_ARGS(ARGS::Vector, cmd::Command, offset::Integer=0) = begin
   mappings = Dict{Parameter,Any}()
   positionals = 0
-  i = 1
+  i = 1 + offset
   while i <= length(ARGS)
     arg = ARGS[i]
     if occursin(kw_arg, arg)
@@ -90,9 +110,9 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
                     ARGS[i+1:end])
         arg = ARGS[i]
         dashes, argname, value = match(kw_arg, arg).captures
-        flags = filter(f->startswith(String(name(f)), argname), cli.flags)
+        flags = filter(f->startswith(String(name(f)), argname), cmd.flags)
       else
-        flags = filter(f->name(f) == Symbol(argname), cli.flags)
+        flags = filter(f->name(f) == Symbol(argname), cmd.flags)
       end
       @assert !isempty(flags) "Invalid keyword argument $arg"
       @assert length(flags) == 1 "$arg is ambiguous. Use $(join(map(name, flags), ", ", ", or ")) instead"
@@ -102,10 +122,10 @@ parse_ARGS(ARGS::Vector, cli::CLI) = begin
       else
         mappings[param] = true
       end
-    elseif cli.positionals[positionals + 1] isa Spread
-      push!(get!(mappings, cli.positionals[positionals + 1], []), arg)
+    elseif cmd.positionals[positionals + 1] isa Spread
+      push!(get!(mappings, cmd.positionals[positionals + 1], []), arg)
     else
-      mappings[cli.positionals[positionals += 1]] = arg
+      mappings[cmd.positionals[positionals += 1]] = arg
     end
     i += 1
   end
@@ -134,15 +154,15 @@ default_value(p::Single) =
   else p.default
   end
 
-print_help(cli::CLI, doc) = begin
+print_help(cmd::Command, doc) = begin
   println(doc)
   println("Positional arguments:")
-  for param in cli.positionals
+  for param in cmd.positionals
     print_help(param, false)
   end
   println()
   println("Keyword arguments")
-  for param in cli.flags
+  for param in cmd.flags
     print_help(param, true)
   end
 end
