@@ -8,7 +8,7 @@ macro main(tuple)
   quote
     Base.@__doc__ $name = $cmd
     push!($name.flags, help)
-    mapping = parse_ARGS(Main.ARGS, $name, 0)
+    mapping = parse_ARGS(Main.ARGS, $name)
     if haskey(mapping, help)
       print_help($cmd, Base.@doc($name))
       exit()
@@ -52,8 +52,8 @@ name(::Command{t}) where t = t
 macro command(name, block)
   quote
     Base.@__doc__ c = $(parse_command(name))
-    if Symbol(Main.ARGS[1]) == name(c)
-      mapping = parse_ARGS(Main.ARGS, c, 1)
+    if !isempty(Main.ARGS) && Symbol(Main.ARGS[1]) == name(c)
+      mapping = parse_ARGS(Main.ARGS[2:end], c)
       for param in vcat(c.positionals, c.flags)
         value = if haskey(mapping, param)
           mapping[param]
@@ -74,7 +74,7 @@ end
 
 parse_command(title) = begin
   name, params... = title.args
-  if Meta.isexpr(params[1], :parameters)
+  if !isempty(params) && Meta.isexpr(params[1], :parameters)
     :(Command{$(QuoteNode(name))}($(parse_params(params[2:end])), $(parse_params(params[1].args))))
   else
     :(Command{$(QuoteNode(name))}($(parse_params(params)), []))
@@ -94,10 +94,10 @@ parse_param(p) = begin
   end
 end
 
-parse_ARGS(ARGS::Vector, cmd::Command, offset::Integer=0) = begin
+parse_ARGS(ARGS::Vector, cmd::Command) = begin
   mappings = Dict{Parameter,Any}()
   positionals = 0
-  i = 1 + offset
+  i = 1
   while i <= length(ARGS)
     arg = ARGS[i]
     if occursin(kw_arg, arg)
