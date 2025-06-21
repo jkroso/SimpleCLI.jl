@@ -164,10 +164,12 @@ default_value(p::Single) =
   else p.default
   end
 
-print_help(cmd::Command, doc::Markdown.MD) = print_help(cmd, string(doc))
-print_help(cmd::Command, doc::Docs.DocStr) = print_help(cmd, join(doc.text, '\n'))
-print_help(cmd::Command, doc::AbstractString) = begin
-  println(doc)
+text(doc::Docs.DocStr) = join(doc.text, '\n')
+text(doc::Markdown.MD) = string(doc)
+text(doc) = doc
+
+print_help(cmd::Command, doc) = begin
+  println(text(doc))
   println()
 
   # Show sub-commands if this is the main command and there are other commands
@@ -176,8 +178,8 @@ print_help(cmd::Command, doc::AbstractString) = begin
     for (cmd_name, (sub_cmd, sub_doc)) in CLI_COMMANDS
       if cmd_name != :main
         print("  ", cmd_name)
-        if !isempty(sub_doc.text)
-          print(" - ", first(sub_doc.text))
+        if !isempty(text(sub_doc))
+          print(" - ", text(sub_doc))
         end
         println()
       end
