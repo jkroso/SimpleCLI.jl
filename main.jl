@@ -1,4 +1,5 @@
 @use "github.com/jkroso/Prospects.jl" assoc
+@use Markdown
 
 const kw_arg = r"^(-{1,2})(\w+)(?:=(\w+))?"
 
@@ -12,7 +13,7 @@ macro cli(expr)
   quote
     Base.@__doc__ $cmd_var = $cmd
     push!($cmd_var.flags, help)
-    
+
     # Register the command
     CLI_COMMANDS[$(QuoteNode(func_name))] = ($cmd_var, Base.@doc($cmd_var))
 
@@ -163,10 +164,12 @@ default_value(p::Single) =
   else p.default
   end
 
-print_help(cmd::Command, doc) = begin
-  println(doc.text...)
+print_help(cmd::Command, doc::Markdown.MD) = print_help(cmd, string(doc))
+print_help(cmd::Command, doc::Docs.DocStr) = print_help(cmd, join(doc.text, '\n'))
+print_help(cmd::Command, doc::AbstractString) = begin
+  println(doc)
   println()
-  
+
   # Show sub-commands if this is the main command and there are other commands
   if name(cmd) == :main && length(CLI_COMMANDS) > 1
     println("Available commands:")
@@ -181,7 +184,7 @@ print_help(cmd::Command, doc) = begin
     end
     println()
   end
-  
+
   println("Positional arguments:")
   for param in cmd.positionals
     print_help(param, false)
