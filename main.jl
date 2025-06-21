@@ -12,6 +12,9 @@ macro cli(expr)
   quote
     Base.@__doc__ $cmd_var = $cmd
     push!($cmd_var.flags, help)
+    
+    # Register the command
+    CLI_COMMANDS[$(QuoteNode(func_name))] = ($cmd_var, Base.@doc($cmd_var))
 
     # Check if this function should be executed
     if isempty(Main.ARGS) || ($(QuoteNode(func_name)) == :main) ||
@@ -74,6 +77,9 @@ struct Command{name}
 end
 
 name(::Command{t}) where t = t
+
+# Registry to track all CLI commands
+const CLI_COMMANDS = Dict{Symbol, Tuple{Command, Any}}()
 
 parse_command(title) = begin
   name, params... = title.args
@@ -160,6 +166,22 @@ default_value(p::Single) =
 print_help(cmd::Command, doc) = begin
   println(doc.text...)
   println()
+  
+  # Show sub-commands if this is the main command and there are other commands
+  if name(cmd) == :main && length(CLI_COMMANDS) > 1
+    println("Available commands:")
+    for (cmd_name, (sub_cmd, sub_doc)) in CLI_COMMANDS
+      if cmd_name != :main
+        print("  ", cmd_name)
+        if !isempty(sub_doc.text)
+          print(" - ", first(sub_doc.text))
+        end
+        println()
+      end
+    end
+    println()
+  end
+  
   println("Positional arguments:")
   for param in cmd.positionals
     print_help(param, false)
