@@ -1,20 +1,20 @@
 # SimpleCLI.jl
 
-Provides simple syntax for defining the parameters a CLI script takes. Inspired by [Fire.jl](//github.com/ylxdzsw/Fire.jl). You will need [Kip.jl](//github.com/jkroso/Kip.jl) installed to use this one though sorry.
+Provides simple syntax for defining the parameters a CLI script takes. Inspired by [Fire.jl](//github.com/ylxdzsw/Fire.jl). You will need [Kip.jl](//github.com/jkroso/Kip.jl) installed.
 
 ## Example
 
 ```julia
 #!/usr/bin/env julia --color=yes
-@require "github.com/jkroso/SimpleCLI.jl" @CLI
+@require "github.com/jkroso/SimpleCLI.jl" @cli
 
 "Prints a message x times"
-@CLI (message::String, times::Integer=3; color::Symbol=:red, newline::Bool=true)
-
-times < 0 && throw(ArgumentError("cannot repeat negative times"))
-for i in 1:times
-  print_with_color(color, message)
-  newline && println()
+@cli main(message::String, times::Integer=3; color::Symbol=:red, newline::Bool=true) = begin
+  times < 0 && throw(ArgumentError("cannot repeat negative times"))
+  for i in 1:times
+    print_with_color(color, message)
+    newline && println()
+  end
 end
 ```
 
